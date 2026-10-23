@@ -1,46 +1,44 @@
-# bookchaowalit-contact-forms-frontend — Product brief
+# Contact Forms — Product truth
 
-**Slug:** `bookchaowalit-website/bookchaowalit-contact-forms-frontend`  
-**Generated:** 2026-08-11 (bulk Book Dev closeout)  
-**Status:** starter / portfolio boundary
+> Inferred from the code and copy (no user interview). Checked against the portfolio card claims review
+> (`portfolio-site-web/docs/audits/CARD-CLAIMS-REVIEW-2026-10.md`, row `contact-forms`, evidence Prototype) on
+> 2026-10-23.
 
-## Purpose
+## What it is
 
-Portfolio repository under Book Dev. This brief records ownership and the
-current honest status so the nested tree is not an empty shell in the task
-system.
+A client-only prototype of a contact form and the inbox that would receive it, both in one page and one browser.
 
-## Runnable path
+## Who it is for
 
-See `README.md` for install and run instructions when present.
+A portfolio visitor who wants to see the compose → inbox → read loop of a contact desk without any delivery system.
 
-## Limits
+## What works today
 
-- Not claimed as production-ready unless README and tests prove it.
-- Mobile smoke / emulator acceptance is separate and toolchain-dependent.
+1. Compose a note; all four fields are required (blank-only input is refused) and the note lands first in the inbox.
+2. Filter the inbox by All, New or Read; opening a letter marks it Read. If the filter hides the selected letter, the
+   first visible one opens instead.
+3. Copy the open letter as plain text or remove it. The inbox is saved in localStorage and survives a reload; broken
+   stored data is ignored and the sample letter is shown.
+4. `/api/mcp` answers JSON-RPC with `list_messages` and `get_message` over the sample letter (it cannot see notes
+   placed in a browser, and it sends nothing).
+5. Front-end and server errors go to Sentry (errors only, personal data stripped) when `NEXT_PUBLIC_SENTRY_DSN` is set.
 
-## Source README excerpt
+## What does not work (and must not be claimed)
 
-```
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+- No self-hosted form system, embeddable snippet, honeypot or spam protection, email notifications or adoption
+  across other projects (claims removed from the portfolio card in the 2026-10 review).
+- No outbound email, CRM sync or sender verification. No product analytics beyond Vercel Analytics.
 
-## Getting Started
+## Live URL and deploy state
 
-First, run the development server:
+- Live: https://contact-forms.bookchaowalit.com (HTTP 200 on 2026-10-23).
+- The Vercel project `bookchaowalit-contact-forms-frontend` is deployed only by CLI (last production 2026-10-23, CLI
+  deploy of commit ae8f5c5, the Next 16.4.2 security patch) and its Git link names the old repository
+  `bookchaowalit/bookchaowalit-contact-forms-frontend`, so a push to `main` does not deploy. The live site lags
+  `main` (no Sentry, template MCP route) until the owner reconnects Vercel Git to this repository (owner action D9).
+  `NEXT_PUBLIC_SENTRY_DSN` is already set on the Vercel project (Sentry project `marketing-contact-forms-web`, org
+  `personal-yu0`).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Boundaries
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize an
-```
+- Browser-only apart from the stateless `/api/mcp` route. The sample letter uses an example.com address.
