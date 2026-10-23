@@ -1,75 +1,74 @@
-import { NextRequest } from 'next/server';
+import { NextResponse } from "next/server";
+import { FILTERS, SEED, filterMessages, type Filter } from "@/lib/contact-forms";
 
-export const runtime = 'edge';
+// Stateless JSON-RPC MCP endpoint over the sample inbox the page starts with. Messages placed in a browser stay in
+// that browser's localStorage, so this route never sees them, and it sends no email.
 
-interface MCPRequest {
-  jsonrpc: '2.0';
-  id: number | string;
-  method: string;
-  params?: any;
-}
+type RpcRequest = { id?: number | string | null; method?: string; params?: { name?: string; arguments?: Record<string, unknown> } };
 
-interface MCPResponse {
-  jsonrpc: '2.0';
-  id: number | string;
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-  };
-}
+const TOOLS = [
+  {
+    name: "list_messages",
+    description: "List the sample inbox messages, optionally only New or Read",
+    inputSchema: { type: "object", properties: { state: { type: "string", enum: FILTERS } } },
+  },
+  {
+    name: "get_message",
+    description: "Get one sample message by id",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+  },
+];
 
-async function getData() {
-  return { message: 'Sample data' };
-}
-
-export async function POST(request: NextRequest) {
-  let requestId: number | string = 0;
-
-  try {
-    const body: MCPRequest = await request.json();
-    requestId = body.id;
-    const { method, params, id } = body;
-
-    let result: any = {};
-
-    switch (method) {
-      case 'initialize':
-        result = {
-          protocolVersion: '2024-11-05',
-          capabilities: { tools: {} },
-          serverInfo: { name: 'MCP Server', version: '1.0.0' }
-        };
-        break;
-
-      case 'tools/list':
-        result = {
-          tools: [
-            {
-              name: 'get_data',
-              description: 'Get sample data',
-              inputSchema: { type: 'object', properties: {} }
-            }
-          ]
-        };
-        break;
-
-      case 'tools/call':
-        result = await getData();
-        break;
-
-      default:
-        throw new Error(`Unknown method: ${method}`);
-    }
-
-    return Response.json({ jsonrpc: '2.0', id, result });
-
-  } catch (error) {
-    return Response.json({
-      jsonrpc: '2.0',
-      id: requestId,
-      error: { code: -32603, message: error instanceof Error ? error.message : 'Internal error' }
-    }, { status: 500 });
+class RpcError extends Error {
+  constructor(readonly code: number, message: string) {
+    super(message);
   }
 }
 
+function callTool(name: string | undefined, args: Record<string, unknown> = {}) {
+  switch (name) {
+    case "list_messages": {
+      const state = args.state ?? "All";
+      if (!(FILTERS as unknown[]).includes(state)) throw new RpcError(-32602, `Unknown state: ${String(state)}`);
+      return { messages: filterMessages(SEED, state as Filter) };
+    }
+    case "get_message": {
+      const message = SEED.find((entry) => entry.id === args.id);
+      if (!message) throw new RpcError(-32602, `No message with id ${String(args.id)}`);
+      return { message };
+    }
+    default:
+      throw new RpcError(-32602, `Unknown tool: ${String(name)}`);
+  }
+}
+
+export async function POST(request: Request) {
+  let id: RpcRequest["id"] = null;
+  try {
+    const body = (await request.json()) as RpcRequest;
+    id = body.id ?? null;
+    let result: unknown;
+    switch (body.method) {
+      case "initialize":
+        result = {
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: {} },
+          serverInfo: { name: "Contact Forms Inbox", version: "1.0.0" },
+        };
+        break;
+      case "tools/list":
+        result = { tools: TOOLS };
+        break;
+      case "tools/call":
+        result = callTool(body.params?.name, body.params?.arguments);
+        break;
+      default:
+        throw new RpcError(-32601, `Unknown method: ${String(body.method)}`);
+    }
+    return NextResponse.json({ jsonrpc: "2.0", id, result });
+  } catch (error) {
+    const code = error instanceof RpcError ? error.code : -32700;
+    const message = error instanceof RpcError ? error.message : "Parse error";
+    return NextResponse.json({ jsonrpc: "2.0", id, error: { code, message } }, { status: 400 });
+  }
+}
