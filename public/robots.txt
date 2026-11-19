@@ -2,4 +2,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://bookchaowalit.com/sitemap.xml
+Sitemap: https://contact-forms.bookchaowalit.com/sitemap.xml
