@@ -112,3 +112,53 @@ describe("lists, reading and removing", () => {
     expect($(".as-toast")).toBeNull();
   });
 });
+
+describe("batch Undo", () => {
+  // Two more messages, so there are at least three rows to remove from.
+  beforeEach(() => {
+    for (let n = 0; n < 2; n++) {
+      compose();
+      act(() => { $<HTMLFormElement>(".as-composer")!.requestSubmit(); });
+    }
+  });
+  // detail 0 = keyboard (Enter/Space) click, 1 = pointer click.
+  const click = (el: Element, detail: number) => act(() => { el.dispatchEvent(new MouseEvent("click", { bubbles: true, detail })); });
+  const shownRows = () => [...host.querySelectorAll<HTMLElement>(".as-row[data-item]")];
+  const rowIds = () => shownRows().map((row) => row.dataset.item);
+  const removeButton = (i: number) => shownRows()[i].querySelector<HTMLButtonElement>(".as-danger")!;
+  const undoButton = () => host.querySelector<HTMLButtonElement>(".as-toast button")!;
+  const escape = () => act(() => { $(".as-toast")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+
+  it("consecutive removes restore together with one Undo", () => {
+    vi.useFakeTimers();
+    const before = rowIds();
+    expect(before.length).toBeGreaterThanOrEqual(3);
+    click(removeButton(1), 1);
+    act(() => { vi.advanceTimersByTime(4000); });
+    click(removeButton(0), 1);
+    expect(rowIds()).toEqual(before.slice(2));
+    expect($(".as-toast span")!.textContent).toBe("Removed 2 messages");
+    expect(undoButton().getAttribute("aria-label")).toBe("Undo remove of 2 messages");
+    // The second removal restarted the 6 s window: 4 s later it is still open.
+    act(() => { vi.advanceTimersByTime(4000); });
+    click(undoButton(), 1);
+    expect(rowIds()).toEqual(before);
+    expect($(".as-toast")).toBeNull();
+    expect($(".as-sr[role=status]")!.textContent).toBe("Restored 2 messages.");
+  });
+
+  it("keyboard remove focuses Undo; Undo focuses the restored row, Escape the next one", () => {
+    const before = rowIds();
+    click(removeButton(0), 0);
+    expect(document.activeElement).toBe(undoButton());
+    expect(document.documentElement.style.getPropertyValue("--as-toast-space")).toMatch(/px$/);
+    click(undoButton(), 0);
+    expect(rowIds()).toEqual(before);
+    expect(document.activeElement).toBe(removeButton(0));
+    click(removeButton(0), 0);
+    escape();
+    expect($(".as-toast")).toBeNull();
+    expect(document.activeElement).toBe(removeButton(0));
+    expect(rowIds()).toEqual(before.slice(1));
+  });
+});

@@ -10,7 +10,14 @@ const MAX_BODY = 2000;
 const TONE: Record<MessageState, Tone> = { New: "amber", Read: "grey" };
 const LIST_NAME: Record<Filter, string> = { All: "All messages", New: "New", Read: "Read" };
 
-type Removed = { message: Message; index: number; viaKeyboard: boolean };
+// index: where it sat in the stored list when removed. nextShown / prevShown: the rows shown around it, for focus.
+type RemovedEntry = { message: Message; index: number; nextShown?: string; prevShown?: string };
+type RemovedBatch = { removals: RemovedEntry[]; viaKeyboard: boolean };
+const removedLabel = (removals: RemovedEntry[]) => (removals.length === 1 ? `Removed message from ${removals[0].message.name}` : `Removed ${removals.length} messages`);
+/** Put a removed message back at its old index, unless it is already there. */
+function putBack(list: Message[], item: Message, index: number): Message[] {
+  return list.some((other) => other.id === item.id) ? list : [...list.slice(0, index), item, ...list.slice(index)];
+}
 
 // randomUUID only exists in secure contexts (HTTPS/localhost) and newer browsers.
 function createId(): string {
@@ -28,12 +35,17 @@ export default function Home() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [removed, setRemoved] = useState<Removed | null>(null);
+  // Every removal still inside the Undo window: one Undo puts them all back where they were.
+  const [removed, setRemovedState] = useState<RemovedBatch | null>(null);
+  // The latest batch, so two removals before a re-render still both land in it.
+  const removedRef = useRef<RemovedBatch | null>(null);
+  const setRemoved = (batch: RemovedBatch | null) => { removedRef.current = batch; setRemovedState(batch); };
   const [toastFocused, setToastFocused] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
   const newRef = useRef<HTMLButtonElement>(null);
   const undoRef = useRef<HTMLButtonElement>(null);
+  const focusNext = useRef<string[] | null>(null);
   const toastRef = useRef<HTMLDivElement>(null);
   const wasComposing = useRef(false);
   const visible = useMemo(() => filterMessages(messages, filter), [messages, filter]);
@@ -47,10 +59,20 @@ export default function Home() {
     wasComposing.current = composing;
   }, [composing]);
   useEffect(() => { if (removed?.viaKeyboard) undoRef.current?.focus(); }, [removed]);
-  // The Undo toast closes 6 s after a removal, but never while it holds focus.
+  // When the toast closes after Undo or Escape, focus goes back near the removed row once the list has re-rendered:
+  // the first of these rows still shown, else the New button.
+  useEffect(() => {
+    const ids = focusNext.current;
+    if (removed || !ids) return;
+    focusNext.current = null;
+    const rows = [...document.querySelectorAll<HTMLElement>(".as-row[data-item]")];
+    const row = ids.map((id) => rows.find((entry) => entry.dataset.item === id)).find(Boolean);
+    (row?.querySelector<HTMLButtonElement>(".as-danger") ?? newRef.current)?.focus();
+  }, [removed, messages]);
+  // The Undo toast closes 6 s after the latest removal (each removal restarts it), but never while it holds focus.
   useEffect(() => {
     if (!removed || toastFocused) return;
-    const timer = window.setTimeout(() => setRemoved(null), 6000);
+    const timer = window.setTimeout(() => { removedRef.current = null; setRemovedState(null); }, 6000);
     return () => window.clearTimeout(timer);
   }, [removed, toastFocused]);
   // While the toast shows, the page reserves its height so nothing focusable stays hidden under it.
@@ -96,17 +118,29 @@ export default function Home() {
     const index = messages.findIndex((item) => item.id === message.id);
     if (index < 0) return;
     setMessages((current) => removeMessage(current, message.id));
-    setRemoved({ message, index, viaKeyboard });
-    setAnnouncement(`Removed the message from ${message.name}. Undo is available for a few seconds.`);
+    const shownAt = visible.findIndex((item) => item.id === message.id);
+    const removal: RemovedEntry = { message, index, nextShown: visible[shownAt + 1]?.id, prevShown: shownAt > 0 ? visible[shownAt - 1].id : undefined };
+    const removals = [...(removedRef.current?.removals ?? []), removal];
+    setRemoved({ removals, viaKeyboard });
+    setAnnouncement(removals.length === 1 ? `Removed the message from ${message.name}. Undo is available for a few seconds.` : `Removed ${removals.length} messages. Undo is available for a few seconds.`);
   }
 
-  function undo() {
-    if (!removed) return;
-    const { message, index } = removed;
-    setMessages((current) => (current.some((item) => item.id === message.id) ? current : [...current.slice(0, index), message, ...current.slice(index)]));
-    setAnnouncement(`Restored the message from ${message.name}.`);
+  function closeToast(focusIds?: string[]) {
+    const last = removedRef.current?.removals.at(-1);
+    // Dismissed: the row after the removed one, else the one before it.
+    focusNext.current = focusIds ?? [last?.nextShown, last?.prevShown].filter((id): id is string => Boolean(id));
     setRemoved(null);
     setToastFocused(false);
+  }
+  function undo() {
+    const removals = removedRef.current?.removals;
+    if (!removals?.length) return;
+    // Latest removal first, so each index refers to the list as it was just before that removal.
+    setMessages((current) => removals.reduceRight((list, { message, index }) => putBack(list, message, index), current));
+    const latest = removals[removals.length - 1].message;
+    setAnnouncement(removals.length === 1 ? `Restored the message from ${latest.name}.` : `Restored ${removals.length} messages.`);
+    // Undone: back to the restored row the user removed last.
+    closeToast([latest.id]);
   }
 
   const title = LIST_NAME[filter];
@@ -176,7 +210,7 @@ export default function Home() {
               {visible.map((message) => {
                 const open = openId === message.id;
                 return (
-                  <li className="as-row" key={message.id}>
+                  <li className="as-row" key={message.id} data-item={message.id}>
                     <div>
                       <h3>
                         <button type="button" className="cf-open" data-new={message.state === "New" ? "true" : undefined} aria-expanded={open} aria-controls={`letter-${message.id}`} onClick={() => toggle(message)}>
@@ -227,10 +261,10 @@ export default function Home() {
           aria-label="Undo remove"
           onFocus={() => setToastFocused(true)}
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setToastFocused(false); }}
-          onKeyDown={(event) => { if (event.key === "Escape") { setRemoved(null); setToastFocused(false); } }}
+          onKeyDown={(event) => { if (event.key === "Escape") closeToast(); }}
         >
-          <span>Removed message from {removed.message.name}</span>
-          <button ref={undoRef} type="button" className="as-plain" onClick={undo}>Undo</button>
+          <span>{removedLabel(removed.removals)}</span>
+          <button ref={undoRef} type="button" className="as-plain" onClick={undo} aria-label={removed.removals.length === 1 ? "Undo remove" : `Undo remove of ${removed.removals.length} messages`}>Undo</button>
         </div>
       ) : null}
 
