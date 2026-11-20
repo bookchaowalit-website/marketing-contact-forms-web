@@ -196,3 +196,16 @@ describe("2026-11-20 review", () => {
     expect(css).toMatch(/\.cf-saved > span \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;/);
   });
 });
+
+describe("out-of-range dates", () => {
+  it("a saved message whose date is outside the Date range renders with \"Date unknown\" instead of crashing", () => {
+    act(() => root.unmount());
+    localStorage.setItem("contact-forms-v2", JSON.stringify([{ id: "x", name: "Bo", email: "bo@domain.test", subject: "Odd date", body: "Hi", at: 1e300, state: "New" }]));
+    root = createRoot(host);
+    act(() => root.render(<Home />));
+    expect(rows()).toEqual(["Bo · Odd date"]);
+    const meta = host.querySelector(".as-row .as-row-meta")!;
+    expect(meta.textContent).toContain("Date unknown");
+    expect(meta.querySelector("time")).toBeNull();
+  });
+});

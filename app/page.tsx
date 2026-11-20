@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AppFoot, AppTop, ListButton, Pill, PlusIcon, type Tone } from "@/components/app-shell";
-import { FILTERS, SEED, STORAGE_KEY, addMessage, filterMessages, formatLetter, markRead, parseMessages, removeMessage, restoreMessage, type Draft, type Filter, type Message, type MessageState } from "@/lib/contact-forms";
+import { FILTERS, SEED, STORAGE_KEY, addMessage, filterMessages, formatLetter, addedIso, markRead, parseMessages, removeMessage, restoreMessage, type Draft, type Filter, type Message, type MessageState } from "@/lib/contact-forms";
 import { useStoredState } from "@/lib/use-stored-state";
 
 const EMPTY: Draft = { name: "", email: "", subject: "", body: "" };
@@ -231,6 +231,8 @@ export default function Home() {
             <ul className="as-list" aria-label={title}>
               {visible.map((message) => {
                 const open = openId === message.id;
+                // Stored data is untrusted: an `at` outside the Date range shows "Date unknown" instead of crashing.
+                const iso = addedIso(message.at);
                 return (
                   <li className="as-row" key={message.id} data-item={message.id}>
                     <div>
@@ -240,7 +242,7 @@ export default function Home() {
                         </button>
                       </h3>
                       {open ? null : <p className="as-row-detail">{message.body}</p>}
-                      <p className="as-row-meta"><time dateTime={new Date(message.at).toISOString()}>{formatDate(message.at)}</time>{message.id === "seed" ? " · Example message" : ""}</p>
+                      <p className="as-row-meta">{iso ? <time dateTime={iso}>{formatDate(message.at)}</time> : "Date unknown"}{message.id === "seed" ? " · Example message" : ""}</p>
                       {open ? (
                         <div className="cf-letter" id={`letter-${message.id}`}>
                           <p className="cf-from">From {message.name} &lt;{message.email}&gt;</p>

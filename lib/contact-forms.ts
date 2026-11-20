@@ -92,6 +92,14 @@ export function restoreMessage(messages: Message[], message: Message, index: num
   return [...messages.slice(0, at), message, ...messages.slice(at)];
 }
 
+/** Largest |timestamp| a JS Date accepts; beyond it toISOString() throws. */
+const MAX_TIME = 8.64e15;
+
+/** ISO date for a message's `at`, or null when it is outside the Date range (stored data is untrusted). */
+export function addedIso(at: number): string | null {
+  return Number.isFinite(at) && Math.abs(at) <= MAX_TIME ? new Date(at).toISOString() : null;
+}
+
 export function formatLetter(message: Message): string {
   return `${message.name} <${message.email}>\n${message.subject}\n\n${message.body}`;
 }
