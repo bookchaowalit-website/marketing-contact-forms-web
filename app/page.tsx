@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AppFoot, AppTop, ListButton, Pill, PlusIcon, type Tone } from "@/components/app-shell";
-import { FILTERS, SEED, STORAGE_KEY, addMessage, filterMessages, formatLetter, markRead, parseMessages, removeMessage, type Draft, type Filter, type Message, type MessageState } from "@/lib/contact-forms";
+import { FILTERS, SEED, STORAGE_KEY, addMessage, filterMessages, formatLetter, markRead, parseMessages, removeMessage, restoreMessage, type Draft, type Filter, type Message, type MessageState } from "@/lib/contact-forms";
 import { useStoredState } from "@/lib/use-stored-state";
 
 const EMPTY: Draft = { name: "", email: "", subject: "", body: "" };
@@ -10,14 +10,11 @@ const MAX_BODY = 2000;
 const TONE: Record<MessageState, Tone> = { New: "amber", Read: "grey" };
 const LIST_NAME: Record<Filter, string> = { All: "All messages", New: "New", Read: "Read" };
 
-// index: where it sat in the stored list when removed. nextShown / prevShown: the rows shown around it, for focus.
-type RemovedEntry = { message: Message; index: number; nextShown?: string; prevShown?: string };
+// index / prevId / nextId / removedAt: where it sat in the stored list when removed (restoreMessage prefers the
+// neighbours). nextShown / prevShown: the rows shown around it, for focus.
+type RemovedEntry = { message: Message; index: number; prevId?: string; nextId?: string; removedAt: number; nextShown?: string; prevShown?: string };
 type RemovedBatch = { removals: RemovedEntry[]; viaKeyboard: boolean };
 const removedLabel = (removals: RemovedEntry[]) => (removals.length === 1 ? `Removed message from ${removals[0].message.name}` : `Removed ${removals.length} messages`);
-/** Put a removed message back at its old index, unless it is already there. */
-function putBack(list: Message[], item: Message, index: number): Message[] {
-  return list.some((other) => other.id === item.id) ? list : [...list.slice(0, index), item, ...list.slice(index)];
-}
 
 // randomUUID only exists in secure contexts (HTTPS/localhost) and newer browsers.
 function createId(): string {
@@ -33,6 +30,10 @@ export default function Home() {
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [openId, setOpenId] = useState<string | null>(null);
+  // A message opened from a list it is about to leave (New: opening marks it Read) stays shown there until it is
+  // closed or the list changes, so it can be read where it was picked.
+  const [kept, setKept] = useState<{ id: string; filter: Filter } | null>(null);
+  const focusAfterClose = useRef<string[] | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   // Every removal still inside the Undo window: one Undo puts them all back where they were.
@@ -48,7 +49,10 @@ export default function Home() {
   const focusNext = useRef<string[] | null>(null);
   const toastRef = useRef<HTMLDivElement>(null);
   const wasComposing = useRef(false);
-  const visible = useMemo(() => filterMessages(messages, filter), [messages, filter]);
+  const visible = useMemo(
+    () => messages.filter((message) => filter === "All" || message.state === filter || (kept?.filter === filter && kept.id === message.id)),
+    [messages, filter, kept],
+  );
   const countOf = (state: Filter) => filterMessages(messages, state).length;
   const ready = Boolean(draft.name.trim() && draft.email.trim() && draft.subject.trim() && draft.body.trim());
 
@@ -69,6 +73,14 @@ export default function Home() {
     const row = ids.map((id) => rows.find((entry) => entry.dataset.item === id)).find(Boolean);
     (row?.querySelector<HTMLButtonElement>(".as-danger") ?? newRef.current)?.focus();
   }, [removed, messages]);
+  // Closing a kept message drops its row: focus goes to the next row's opener, else the previous one, else the list.
+  useEffect(() => {
+    const ids = focusAfterClose.current;
+    if (!ids) return;
+    focusAfterClose.current = null;
+    const opener = ids.map((id) => document.querySelector<HTMLButtonElement>(`.as-row[data-item="${CSS.escape(id)}"] .cf-open`)).find(Boolean);
+    (opener ?? document.querySelector<HTMLButtonElement>('.as-lists button[aria-current="true"]'))?.focus();
+  }, [kept]);
   // The Undo toast closes 6 s after the latest removal (each removal restarts it), but never while it holds focus.
   useEffect(() => {
     if (!removed || toastFocused) return;
@@ -101,7 +113,17 @@ export default function Home() {
   function toggle(message: Message) {
     const opening = openId !== message.id;
     setOpenId(opening ? message.id : null);
-    if (opening && message.state === "New") setMessages((current) => markRead(current, message.id));
+    if (opening) {
+      setKept({ id: message.id, filter });
+      if (message.state === "New") setMessages((current) => markRead(current, message.id));
+      return;
+    }
+    // Closing: if the row only stayed because it was kept, it leaves the list now.
+    if (kept?.id === message.id && filter !== "All" && message.state !== filter) {
+      const shownAt = visible.findIndex((item) => item.id === message.id);
+      focusAfterClose.current = [visible[shownAt + 1]?.id, shownAt > 0 ? visible[shownAt - 1].id : undefined].filter((id): id is string => Boolean(id));
+    }
+    setKept(null);
   }
 
   async function copy(message: Message) {
@@ -119,7 +141,7 @@ export default function Home() {
     if (index < 0) return;
     setMessages((current) => removeMessage(current, message.id));
     const shownAt = visible.findIndex((item) => item.id === message.id);
-    const removal: RemovedEntry = { message, index, nextShown: visible[shownAt + 1]?.id, prevShown: shownAt > 0 ? visible[shownAt - 1].id : undefined };
+    const removal: RemovedEntry = { message, index, prevId: messages[index - 1]?.id, nextId: messages[index + 1]?.id, removedAt: Date.now(), nextShown: visible[shownAt + 1]?.id, prevShown: shownAt > 0 ? visible[shownAt - 1].id : undefined };
     const removals = [...(removedRef.current?.removals ?? []), removal];
     setRemoved({ removals, viaKeyboard });
     setAnnouncement(removals.length === 1 ? `Removed the message from ${message.name}. Undo is available for a few seconds.` : `Removed ${removals.length} messages. Undo is available for a few seconds.`);
@@ -135,8 +157,8 @@ export default function Home() {
   function undo() {
     const removals = removedRef.current?.removals;
     if (!removals?.length) return;
-    // Latest removal first, so each index refers to the list as it was just before that removal.
-    setMessages((current) => removals.reduceRight((list, { message, index }) => putBack(list, message, index), current));
+    // Latest removal first; each goes back between its old neighbours, below messages saved since (deeplinks pattern).
+    setMessages((current) => removals.reduceRight((list, { message, index, prevId, nextId, removedAt }) => restoreMessage(list, message, index, { prevId, nextId, removedAt }), current));
     const latest = removals[removals.length - 1].message;
     setAnnouncement(removals.length === 1 ? `Restored the message from ${latest.name}.` : `Restored ${removals.length} messages.`);
     // Undone: back to the restored row the user removed last.

@@ -71,6 +71,27 @@ export function removeMessage(messages: Message[], id: string): Message[] {
   return messages.filter((message) => message.id !== id);
 }
 
+/**
+ * Where a removed message sat in the stored list (its neighbours' ids) and when it was removed, so Undo can find its
+ * place again: messages saved after the removal went on top and would shift a bare index.
+ */
+export type Neighbours = { prevId?: string; nextId?: string; removedAt?: number };
+
+/**
+ * Puts a removed message back (Undo), next to its old neighbours when they are still listed, else at its old index
+ * counted below the messages saved since the removal; a message already back stays single. (deeplinks pattern)
+ */
+export function restoreMessage(messages: Message[], message: Message, index: number, neighbours: Neighbours = {}): Message[] {
+  if (messages.some((item) => item.id === message.id)) return messages;
+  const prevAt = neighbours.prevId ? messages.findIndex((item) => item.id === neighbours.prevId) : -1;
+  const nextAt = neighbours.nextId ? messages.findIndex((item) => item.id === neighbours.nextId) : -1;
+  let addedOnTop = 0;
+  const { removedAt } = neighbours;
+  if (removedAt !== undefined) while (addedOnTop < messages.length && messages[addedOnTop].at > removedAt) addedOnTop += 1;
+  const at = prevAt >= 0 ? prevAt + 1 : nextAt >= 0 ? nextAt : Math.max(0, Math.min(index + addedOnTop, messages.length));
+  return [...messages.slice(0, at), message, ...messages.slice(at)];
+}
+
 export function formatLetter(message: Message): string {
   return `${message.name} <${message.email}>\n${message.subject}\n\n${message.body}`;
 }

@@ -16,6 +16,7 @@ html, body { margin: 0; background: var(--as-bg); }
 .cf-hint { display: flex; justify-content: space-between; gap: 12px; color: var(--as-muted); font-size: 13px; font-weight: 400; }
 .cf-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .cf-saved { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 16px; padding: 8px 8px 8px 16px; border: 1px solid var(--as-green); border-radius: 14px; background: var(--as-green-bg); color: var(--as-green); font-size: 15px; font-weight: 600; }
+.cf-saved > span { min-width: 0; overflow-wrap: anywhere; }
 .cf-saved .as-plain { color: var(--as-green); }
 .cf-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 @media (max-width: 760px) { .cf-pair { grid-template-columns: 1fr; } }

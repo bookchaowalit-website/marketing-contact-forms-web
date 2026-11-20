@@ -162,3 +162,37 @@ describe("batch Undo", () => {
     expect(rowIds()).toEqual(before.slice(1));
   });
 });
+
+describe("2026-11-20 review", () => {
+  it("a message opened from the New list stays open to read; closing it hands focus on", () => {
+    press(button("New", $(".as-side")!));
+    press(button("Mina Park"));
+    expect($(".cf-letter")!.textContent).toContain("mina@example.com");
+    expect(rows()).toEqual(["Mina Park · A question about the work"]);
+    expect(JSON.parse(localStorage.getItem("contact-forms-v2")!)[0].state).toBe("Read");
+    act(() => { button("Mina Park").focus(); });
+    press(button("Mina Park"), 0);
+    expect(rows()).toEqual([]);
+    expect(document.activeElement).toBe(host.querySelector('.as-lists button[aria-current="true"]'));
+  });
+
+  it("after Undo, messages saved since the removal stay on top", () => {
+    compose();
+    act(() => { $<HTMLFormElement>(".as-composer")!.requestSubmit(); });
+    const ids = () => [...host.querySelectorAll<HTMLElement>(".as-row[data-item]")].map((row) => row.dataset.item);
+    const [first, seed] = ids();
+    press(host.querySelector<HTMLButtonElement>(`.as-row[data-item="${first}"] .as-danger`)!);
+    compose();
+    act(() => { $<HTMLFormElement>(".as-composer")!.requestSubmit(); });
+    const added = ids()[0];
+    expect(added).not.toBe(first);
+    press(button("Undo"));
+    expect(ids()).toEqual([added, first, seed]);
+  });
+
+  it("a long unbroken subject wraps in the save confirmation", async () => {
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync(`${process.cwd()}/app/globals.css`, "utf8");
+    expect(css).toMatch(/\.cf-saved > span \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;/);
+  });
+});
