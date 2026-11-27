@@ -20,12 +20,11 @@ flowchart TD
   FILTER --> REMOVE["Remove (on every row, open or closed, New or Read): removeMessage, Undo toast 6 s; removing again joins the batch and restarts 6 s; one Undo restoreMessage puts the whole batch back near its neighbours"]
   PAGE --> COMPOSE["New message form: name, email, subject, body (max 2000)"]
   COMPOSE --> EMAILCHK{"browser input type=email accepts the address?"}
-  EMAILCHK -->|"no: browser blocks submit"| NOSUBMIT["addMessage never runs"]
+  EMAILCHK -->|"no: browser blocks submit, addMessage never runs"| NOOP
   EMAILCHK -->|yes| VALID{"all four fields non-blank after trim?"}
   VALID -->|no| NOOP["addMessage returns the list unchanged, nothing saved"]
   VALID -->|yes| ADD["addMessage prepends a New letter, announce: no email was sent"]
-  ADD -->|"localStorage write ok"| KEPT["letter survives reload"]
-  ADD -->|"write blocked or storage full"| MEMONLY["letter lives in page memory only, confirmation still shows, gone after reload"]
+  ADD -->|"localStorage write blocked or storage full"| MEMONLY["letter lives in page memory only, confirmation still shows, gone after reload (otherwise saved)"]
   ADD --> FILTER
   MCP["POST /api/mcp JSON-RPC"] --> TOOLS["list_messages (All, New, Read) and get_message over SEED only"]
   TOOLS -->|"bad method, state or id"| ERR["HTTP 400 with JSON-RPC error code"]
