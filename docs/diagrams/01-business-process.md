@@ -9,7 +9,7 @@ Last reviewed: 2026-11-28 · commit `5a8869a`
 ```mermaid
 flowchart TD
   PUSH["push or PR to main"] --> CI["GitHub Actions: shared ci-node + shared security scan"]
-  MAIN["push to main"] -.->|"PRODUCT.md 2026-10-23: Vercel Git link names the old repository, deploy by CLI; current state [ต้องยืนยัน]"| PROD["production may lag main"]
+  MAIN["push to main"] -->|"Vercel Git link, verified 2026-11-28 (separate from ci.yml, not gated by it)"| PROD["production = 5a8869a via Vercel Git; main is ahead only by docs/ commits"]
   VISIT["visitor request (code on main at 5a8869a)"] --> PAGE["GET / : useStoredState loads contact-forms-v2 from localStorage"]
   PAGE -->|"no data, unreadable, JSON parse fails or not an array"| SEED["show the sample letter (example.com address)"]
   PAGE -->|"array with some malformed items"| DROP["drop only the malformed items, no sample letter; all malformed gives an empty inbox"]
@@ -33,7 +33,7 @@ flowchart TD
 
 Sources: `app/page.tsx`, `lib/contact-forms.ts`, `lib/use-stored-state.ts`, `app/api/mcp/route.ts`, `lib/sentry.ts`, `next.config.ts`, `PRODUCT.md`
 
-ข้อเท็จจริงจากโค้ด: ไม่มี outbound email, CRM sync หรือการตรวจผู้ส่ง; `/api/mcp` ไม่มี auth/rate limit ในโค้ด (เปิดสาธารณะ ส่งกลับเฉพาะจดหมายตัวอย่าง). robots และ sitemap เป็นไฟล์สแตติก `public/robots.txt` และ `public/sitemap.xml` (robots ชี้ sitemap ของโดเมนนี้) ไม่ใช่ `app/robots.ts`/`app/sitemap.ts`. PRODUCT.md อ้าง Vercel Analytics แต่ไม่พบในโค้ด [ต้องยืนยัน]. [ต้องยืนยัน] สถานะ deploy ปัจจุบัน (PRODUCT.md บันทึกเมื่อ 2026-10-23).
+ข้อเท็จจริงจากโค้ด: ไม่มี outbound email, CRM sync หรือการตรวจผู้ส่ง; `/api/mcp` ไม่มี auth/rate limit ในโค้ด (เปิดสาธารณะ ส่งกลับเฉพาะจดหมายตัวอย่าง). robots และ sitemap เป็นไฟล์สแตติก `public/robots.txt` และ `public/sitemap.xml` (robots ชี้ sitemap ของโดเมนนี้) ไม่ใช่ `app/robots.ts`/`app/sitemap.ts`. PRODUCT.md อ้าง Vercel Analytics แต่ไม่พบในโค้ด [ต้องยืนยัน]. production = 5a8869a ผ่าน Vercel Git (ตรวจ 2026-11-28); main HEAD 03948bb นำหน้าเฉพาะ commit ใน docs/.
 
 ## To-Be (PRODUCT.md §Live URL and deploy state)
 
@@ -44,13 +44,13 @@ flowchart TD
   VERCEL --> PAGE["GET / and POST /api/mcp (same as As-Is)"]
 ```
 
-Sources: `PRODUCT.md` (owner action D9: reconnect Vercel Git to this repository)
+Sources: `PRODUCT.md` (owner action D9 done, verified 2026-11-28 via Vercel API)
 
 ## Gap
 
 | ID | As-Is → To-Be | Status | Owner | Evidence |
 |---|---|---|---|---|
-| G1 | (ตรวจ Git link ปัจจุบันของ Vercel project ก่อน; PRODUCT.md 2026-10-23 ว่า) Vercel Git link ชี้ repo เก่า, deploy ด้วย CLI → เชื่อมกับ repo นี้ให้ push to `main` deploy เอง | decide | owner | `PRODUCT.md` §Live URL and deploy state (owner action D9) |
+| G1 | (ตรวจ Git link ปัจจุบันของ Vercel project ก่อน; PRODUCT.md 2026-10-23 ว่า) Vercel Git link ชี้ repo เก่า, deploy ด้วย CLI → เชื่อมกับ repo นี้ให้ push to `main` deploy เอง | done | owner | `PRODUCT.md` §Live URL and deploy state (owner action D9); Vercel API 2026-11-28: project `bookchaowalit-contact-forms-frontend` Git link → `bookchaowalit-website/marketing-contact-forms-web`, production branch `main` |
 | G2 | PRODUCT.md อ้าง Vercel Analytics แต่ไม่พบในโค้ด → ตรวจแล้วแก้เอกสารหรือยืนยันที่ Vercel | todo | claude | `package.json`, `app/layout.tsx` (ไม่มี import) |
 
 ## Open questions
