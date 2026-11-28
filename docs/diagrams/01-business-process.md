@@ -55,4 +55,4 @@ Sources: `PRODUCT.md` (owner action D9 done, verified 2026-11-28 via Vercel API)
 
 ## Open questions
 
-- production มี Sentry และ MCP route ปัจจุบันหรือยัง
+- ไม่มีคำถามค้างเรื่อง deploy: production = 5a8869a via Vercel Git; main HEAD 03948bb is ahead only by docs/ commits (ตรวจกับ Vercel API 2026-11-28); จึงมี Sentry และ MCP route ตามโค้ดปัจจุบัน
